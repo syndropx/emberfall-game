@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberfall — Hold the Plaza</title>
+<style>
+  :root {
+    --ink: #fff4e0;
+    --muted: #d8b98f;
+    --ember: #ff9a3c;
+    --ember-hot: #ffc46b;
+    --danger: #ff5340;
+    --teal: #57e6c9;
+    --panel: rgba(24, 14, 8, .82);
+    --panel-line: rgba(255, 170, 80, .35);
+    --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-num: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a0f14; color: var(--ink); font-family: var(--font-ui); }
+  #game, #game canvas { position: fixed; inset: 0; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .hidden { display: none !important; }
+
+  /* Top strip: wave and score on the left, the crystal's health in the middle, embers right. */
+  #topbar { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 20px; }
+  .stat .label { font-size: 10px; letter-spacing: .22em; color: var(--muted); text-transform: uppercase; }
+  .stat .value { font-family: var(--font-num); font-size: 26px; font-weight: 700; line-height: 1.05; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  #crystal-box { width: min(430px, 42vw); text-align: center; }
+  #crystal-box .label { font-size: 10px; letter-spacing: .22em; color: var(--muted); text-transform: uppercase; margin-bottom: 5px; }
+  .bar { height: 12px; border: 1px solid var(--panel-line); background: rgba(0,0,0,.55); border-radius: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff7a2f, var(--ember-hot)); transition: width .25s ease; }
+  #wave-progress { margin-top: 5px; height: 5px; }
+  #wave-progress i { background: var(--teal); }
+
+  /* Bottom-left: the player's own health. Bottom-right: the rifle readout. */
+  #player-box { position: absolute; left: 20px; bottom: 18px; width: 230px; }
+  #player-box .bar i { background: linear-gradient(90deg, #e64533, #ff8a5c); }
+  #hp-text { font-family: var(--font-num); font-size: 15px; margin-top: 4px; color: var(--ink); }
+  #weapon-box { position: absolute; right: 20px; bottom: 18px; text-align: right; }
+  #ammo { font-family: var(--font-num); font-size: 34px; font-weight: 700; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  #ammo small { font-size: 17px; color: var(--muted); }
+  #weapon-name { font-size: 11px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+  #reload-hint { font-size: 12px; color: var(--ember-hot); height: 15px; }
+
+  /* Crosshair, hitmarker, damage vignette, kill feed. */
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); }
+  #crosshair i { position: absolute; background: var(--ink); box-shadow: 0 0 4px rgba(0,0,0,.8); }
+  #crosshair i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 7px; }
+  #crosshair i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 7px; }
+  #crosshair i:nth-child(3) { left: 0; top: 12px; width: 7px; height: 2px; }
+  #crosshair i:nth-child(4) { right: 0; top: 12px; width: 7px; height: 2px; }
+  #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(45deg); width: 18px; height: 18px; opacity: 0; }
+  #hitmarker i { position: absolute; background: var(--ember-hot); }
+  #hitmarker i:nth-child(1) { left: 8px; top: 0; width: 2px; height: 6px; }
+  #hitmarker i:nth-child(2) { left: 8px; bottom: 0; width: 2px; height: 6px; }
+  #hitmarker i:nth-child(3) { left: 0; top: 8px; width: 6px; height: 2px; }
+  #hitmarker i:nth-child(4) { right: 0; top: 8px; width: 6px; height: 2px; }
+  #vignette { position: absolute; inset: 0; box-shadow: inset 0 0 140px rgba(255, 40, 20, .0); transition: box-shadow .12s; }
+  #feed { position: absolute; right: 20px; top: 92px; text-align: right; font-size: 13px; color: var(--muted); }
+  #feed div { margin-bottom: 3px; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+  #feed b { color: var(--ember-hot); font-family: var(--font-num); }
+
+  /* Centre banners: wave calls, countdowns, announcements. */
+  #banner { position: absolute; left: 0; right: 0; top: 24%; text-align: center; }
+  #banner .big { font-size: 52px; font-weight: 800; letter-spacing: .06em; text-shadow: 0 4px 26px rgba(0,0,0,.75); }
+  #banner .sub { font-size: 17px; color: var(--muted); margin-top: 6px; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+
+  /* Full-screen menus: title, upgrade draft, victory, game over. */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: radial-gradient(ellipse at 50% 65%, rgba(30, 12, 4, .25), rgba(10, 4, 8, .78)); pointer-events: auto; padding: 24px; }
+  .screen h1 { font-size: clamp(44px, 8vw, 84px); margin: 0; letter-spacing: .1em; font-weight: 900; background: linear-gradient(180deg, #ffe9bb, #ff9a3c 62%, #e05a1e); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 42px rgba(255, 140, 40, .25); }
+  .screen h2 { font-size: clamp(30px, 5vw, 48px); margin: 0 0 6px; letter-spacing: .08em; }
+  .screen .tag { color: var(--muted); font-size: 17px; max-width: 620px; line-height: 1.5; }
+  .screen .rules { display: flex; gap: 14px; margin: 22px 0 6px; flex-wrap: wrap; justify-content: center; }
+  .rule { background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px; padding: 10px 14px; font-size: 13.5px; color: var(--ink); max-width: 215px; line-height: 1.45; }
+  .rule b { color: var(--ember-hot); display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+  .btn { pointer-events: auto; cursor: pointer; margin-top: 24px; font: 700 17px var(--font-ui); letter-spacing: .12em; color: #2a1503; background: linear-gradient(180deg, var(--ember-hot), var(--ember)); border: 0; border-radius: 10px; padding: 14px 38px; box-shadow: 0 6px 24px rgba(255, 140, 40, .4); }
+  .btn:hover { filter: brightness(1.08); }
+  .keys { margin-top: 16px; color: var(--muted); font-size: 13px; }
+  .keys b { color: var(--ink); font-family: var(--font-num); background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16); border-radius: 5px; padding: 1px 7px; }
+  #cards { display: flex; gap: 16px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+  .card { pointer-events: auto; cursor: pointer; width: 218px; text-align: left; background: var(--panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 16px; color: var(--ink); font-family: var(--font-ui); }
+  .card:hover { border-color: var(--ember-hot); transform: translateY(-3px); }
+  .card .glyph { font-size: 30px; }
+  .card .name { font-weight: 800; font-size: 16.5px; margin: 8px 0 4px; }
+  .card .desc { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+  .card .cost { margin-top: 10px; font-family: var(--font-num); color: var(--ember-hot); font-size: 13px; }
+  .final-stats { display: flex; gap: 26px; margin-top: 14px; font-family: var(--font-num); }
+  .final-stats div { text-align: center; }
+  .final-stats .n { font-size: 30px; font-weight: 700; }
+  .final-stats .l { font-size: 10.5px; letter-spacing: .2em; color: var(--muted); text-transform: uppercase; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div class="stat"><div class="label">Wave</div><div class="value" id="wave-num">1 / 10</div></div>
+    <div id="crystal-box">
+      <div class="label">Ember Crystal</div>
+      <div class="bar"><i id="crystal-bar" style="width:100%"></i></div>
+      <div class="bar" id="wave-progress"><i id="wave-bar" style="width:0%"></i></div>
+    </div>
+    <div class="stat" style="text-align:right"><div class="label">Score · Embers</div><div class="value"><span id="score">0</span> · <span id="embers" style="color:var(--ember-hot)">0</span></div></div>
+  </div>
+  <div id="player-box">
+    <div class="bar"><i id="hp-bar" style="width:100%"></i></div>
+    <div id="hp-text">100 HP</div>
+  </div>
+  <div id="weapon-box">
+    <div id="reload-hint"></div>
+    <div id="ammo">30 <small>/ 30</small></div>
+    <div id="weapon-name">VK-47 Ember Rifle</div>
+  </div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="feed"></div>
+  <div id="banner" class="hidden"><div class="big" id="banner-big"></div><div class="sub" id="banner-sub"></div></div>
+  <div id="vignette"></div>
+</div>
+
+<section id="title-screen" class="screen">
+  <h1>EMBERFALL</h1>
+  <p class="tag">The Hollow come at dusk to drink the last Ember Crystal dry. You are the keeper on the wall-plaza: hold ten waves, grow stronger between them, and keep the light alive until dawn.</p>
+  <div class="rules">
+    <div class="rule"><b>Defend</b>The crystal at the plaza's heart. If it falls — or you do — the light goes out.</div>
+    <div class="rule"><b>Harvest</b>Every Hollow you drop pays embers. Between waves, spend them on one of three upgrades.</div>
+    <div class="rule"><b>Endure</b>Ten waves, each meaner than the last. Clear wave 10 and dawn breaks: you win.</div>
+  </div>
+  <button class="btn" id="start-btn">TAKE YOUR POST</button>
+  <p class="keys"><b>W A S D</b> move &nbsp; <b>Mouse</b> aim &nbsp; <b>Click</b> fire &nbsp; <b>R</b> reload &nbsp; <b>Shift</b> sprint</p>
+</section>
+
+<section id="upgrade-screen" class="screen hidden">
+  <h2 id="upgrade-title">WAVE CLEARED</h2>
+  <p class="tag" id="upgrade-sub">The plaza breathes. Choose one blessing for the next wave.</p>
+  <div id="cards"></div>
+</section>
+
+<section id="end-screen" class="screen hidden">
+  <h2 id="end-title">DAWN BREAKS</h2>
+  <p class="tag" id="end-sub">The crystal still burns. The plaza is yours.</p>
+  <div class="final-stats">
+    <div><div class="n" id="final-score">0</div><div class="l">Score</div></div>
+    <div><div class="n" id="final-kills">0</div><div class="l">Kills</div></div>
+    <div><div class="n" id="final-wave">1</div><div class="l">Wave</div></div>
+  </div>
+  <button class="btn" id="restart-btn">PLAY AGAIN</button>
+  <p class="keys">The Hollow always return at dusk.</p>
+</section>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
