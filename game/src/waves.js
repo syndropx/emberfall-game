@@ -12,7 +12,7 @@ export const WAVE_PLAN = [
   { husk: 22, soldier: 10, brute: 2, interval: 0.95 },
   { husk: 24, soldier: 12, brute: 3, interval: 0.9 },
   { husk: 28, soldier: 14, brute: 3, interval: 0.82 },
-  { husk: 32, soldier: 16, brute: 4, interval: 0.75 },
+  { husk: 30, soldier: 14, brute: 3, king: 1, interval: 0.8 },
 ];
 export const TOTAL_WAVES = WAVE_PLAN.length;
 
@@ -32,6 +32,9 @@ export function waveComposition(wave) {
     const [b] = list.splice(firstBrute, 1);
     list.splice(5 + Math.floor(Math.random() * 4), 0, b);
   }
+  // The Hollow King never queues with the rabble: he walks in last, when the wave
+  // is thinned and the keeper is tired — the finale the whole night builds toward.
+  if (plan.king) list.push('king');
   return { list, total: list.length, interval: plan.interval, hpScale: 1 + (wave - 1) * 0.06 };
 }
 
@@ -45,10 +48,11 @@ export const UPGRADES = [
   { id: 'speed', glyph: '➤', name: 'Dusk Striders', cost: 40, desc: 'Move 12% faster. The plaza feels smaller already.', apply: ({ player }) => { player.addSpeed(0.12); } },
   { id: 'siphon', glyph: '◎', name: 'Ember Siphon', cost: 55, desc: 'Every kill pays 50% more embers, rounded up with interest.', apply: ({ game }) => { game.emberMultiplier *= 1.5; } },
   { id: 'wind', glyph: '✚', name: 'Second Wind', cost: 35, desc: 'Catch your breath: heal 60 health immediately.', apply: ({ player }) => { player.heal(60); } },
+  { id: 'smg', glyph: '≫', name: 'Raptor SMG', cost: 85, desc: 'Trade the VK-47 for the Raptor: twice the fire rate, lighter rounds, 40 in the drum. A different stand entirely.', apply: ({ weapon }) => { weapon.swapTo('smg'); } },
 ];
 
-export function draftUpgrades(count = 3) {
-  const pool = [...UPGRADES];
+export function draftUpgrades(count = 3, exclude = new Set()) {
+  const pool = UPGRADES.filter((u) => !exclude.has(u.id));
   const picked = [];
   while (picked.length < count && pool.length) {
     picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);

@@ -12,6 +12,14 @@ export const WEAPON_STATS = {
   pierce: 0, // extra targets a round passes through, from the Piercing upgrade
 };
 
+// The keeper's two stands: the VK-47 rifle he starts with, and the Raptor SMG the
+// draft can trade it for — lighter rounds twice as fast, a drum that holds 40, and
+// a shorter barrel with a fatter magazine so the swap reads in the viewmodel too.
+export const WEAPON_KINDS = {
+  rifle: { ...WEAPON_STATS },
+  smg: { damage: 19, headshotMultiplier: 2, fireInterval: 0.062, magSize: 40, reloadTime: 1.6, pierce: 0 },
+};
+
 function box(parent, x, y, z, w, h, d, mat) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
@@ -35,9 +43,9 @@ export function createWeapon(camera, scene) {
   const ember = new THREE.MeshBasicMaterial({ color: 0xffa030 });
   box(gun, 0, 0, -0.18, 0.075, 0.11, 0.34, steel); // receiver
   box(gun, 0, -0.045, -0.02, 0.06, 0.13, 0.09, steelDark); // grip
-  box(gun, 0.005, -0.085, -0.2, 0.05, 0.16, 0.075, tan).rotation.x = 0.18; // magazine
+  const magMesh = box(gun, 0.005, -0.085, -0.2, 0.05, 0.16, 0.075, tan); magMesh.rotation.x = 0.18; // magazine
   box(gun, 0, 0.005, -0.44, 0.055, 0.075, 0.24, wood); // handguard
-  box(gun, 0, 0.028, -0.6, 0.026, 0.026, 0.2, steelDark); // barrel
+  const barrelMesh = box(gun, 0, 0.028, -0.6, 0.026, 0.026, 0.2, steelDark); // barrel
   box(gun, 0, 0.028, -0.71, 0.045, 0.045, 0.05, steelDark); // muzzle brake
   box(gun, 0, -0.01, 0.09, 0.07, 0.09, 0.12, wood); // stock
   box(gun, 0, 0.085, -0.3, 0.02, 0.05, 0.16, steelDark); // rear sight rail
@@ -91,8 +99,24 @@ export function createWeapon(camera, scene) {
 
   const muzzleWorld = new THREE.Vector3();
 
+  let kind = 'rifle';
   return {
     stats,
+    get kind() { return kind; },
+    // Trade stands: the new weapon's stats replace the old one's wholesale (draft
+    // blessings bought for the old gun stay with it), the drum comes loaded, and
+    // the viewmodel reshapes — snub barrel and drum mag for the Raptor.
+    swapTo(next) {
+      kind = next;
+      Object.assign(stats, WEAPON_KINDS[next]);
+      ammo = stats.magSize;
+      reloadingUntil = 0;
+      const label = document.getElementById('weapon-name');
+      if (label) label.textContent = next === 'smg' ? 'Raptor SMG' : 'VK-47 Ember Rifle';
+      barrelMesh.scale.z = next === 'smg' ? 0.5 : 1;
+      barrelMesh.position.z = next === 'smg' ? -0.55 : -0.6;
+      magMesh.scale.set(next === 'smg' ? 1.5 : 1, next === 'smg' ? 1.35 : 1, 1.3);
+    },
     get ammo() { return ammo; },
     get reloading() { return performance.now() / 1000 < reloadingUntil; },
     setTrigger(held) { triggerHeld = held; },

@@ -9,6 +9,7 @@ export const HOLLOW_TYPES = {
   husk: { hp: 40, speed: 4.7, radius: 0.5, scale: 0.92, crystalDamage: 6, playerDamage: 8, attackTime: 0.9, embers: 6, score: 50, ranged: 0 },
   soldier: { hp: 90, speed: 3.1, radius: 0.55, scale: 1.0, crystalDamage: 5, playerDamage: 7, attackTime: 2.2, embers: 10, score: 100, ranged: 15 },
   brute: { hp: 380, speed: 1.75, radius: 0.95, scale: 1.62, crystalDamage: 22, playerDamage: 18, attackTime: 1.5, embers: 25, score: 300, ranged: 0 },
+  king: { hp: 2400, speed: 1.45, radius: 1.5, scale: 2.6, crystalDamage: 40, playerDamage: 26, attackTime: 1.6, embers: 150, score: 1500, ranged: 20 },
 };
 
 const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a3548, roughness: .92, emissive: 0x140a10 });
@@ -45,7 +46,7 @@ function buildBody(kind) {
     box(g, 0.3, 1.12, 0.34, 0.09, 0.09, 0.62, boneMat); // ember lance, held forward
     box(g, -0.18, 0.33, 0, 0.17, 0.66, 0.19, clothMat);
     box(g, 0.18, 0.33, 0, 0.17, 0.66, 0.19, clothMat);
-  } else {
+  } else if (kind === 'brute') {
     box(g, 0, 1.12, 0, 1.24, 1.1, 0.62, bodyMat); // brute: a wall of a torso
     box(g, 0, 1.92, 0, 0.46, 0.44, 0.46, boneMat);
     box(g, -0.3, 2.2, 0, 0.09, 0.42, 0.09, boneMat).rotation.z = 0.5; // horns
@@ -54,13 +55,25 @@ function buildBody(kind) {
     box(g, 0.78, 0.95, 0, 0.24, 1.15, 0.24, bodyMat);
     box(g, -0.3, 0.36, 0, 0.26, 0.72, 0.28, clothMat);
     box(g, 0.3, 0.36, 0, 0.26, 0.72, 0.28, clothMat);
+  } else {
+    // The Hollow King: a brute's bulk crowned in bone spikes, pauldrons like gate
+    // towers, and a heart-core big enough to aim at from across the plaza.
+    box(g, 0, 1.12, 0, 1.34, 1.18, 0.68, bodyMat);
+    box(g, 0, 1.94, 0, 0.5, 0.48, 0.5, boneMat);
+    for (let i = -2; i <= 2; i++) box(g, i * 0.14, 2.32, 0, 0.07, 0.34 + (2 - Math.abs(i)) * 0.09, 0.07, boneMat).rotation.z = -i * 0.16; // the crown
+    box(g, -0.86, 1.52, 0, 0.34, 0.3, 0.5, clothMat); // pauldrons
+    box(g, 0.86, 1.52, 0, 0.34, 0.3, 0.5, clothMat);
+    box(g, -0.84, 0.92, 0, 0.26, 1.3, 0.26, bodyMat);
+    box(g, 0.84, 0.92, 0, 0.26, 1.3, 0.26, bodyMat);
+    box(g, -0.32, 0.36, 0, 0.28, 0.72, 0.3, clothMat);
+    box(g, 0.32, 0.36, 0, 0.28, 0.72, 0.3, clothMat);
   }
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(kind === 'brute' ? 0.3 : 0.19), coreMat);
-  core.position.set(0, kind === 'husk' ? 1.08 : 1.14, 0.24);
+  const core = new THREE.Mesh(new THREE.OctahedronGeometry(kind === 'king' ? 0.36 : kind === 'brute' ? 0.3 : 0.19), coreMat);
+  core.position.set(0, kind === 'husk' ? 1.08 : 1.14, kind === 'king' ? 0.38 : 0.24);
   g.add(core);
   for (const sx of [-0.08, 0.08]) {
     const eye = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.02), eyeMat);
-    eye.position.set(sx * (kind === 'brute' ? 1.6 : 1), kind === 'husk' ? 1.36 : kind === 'brute' ? 1.98 : 1.74, kind === 'husk' ? 0.49 : 0.2);
+    eye.position.set(sx * (kind === 'king' ? 1.9 : kind === 'brute' ? 1.6 : 1), kind === 'husk' ? 1.36 : kind === 'king' ? 2.0 : kind === 'brute' ? 1.98 : 1.74, kind === 'husk' ? 0.49 : kind === 'king' ? 0.26 : 0.2);
     g.add(eye);
   }
   g.scale.setScalar(s);
@@ -81,11 +94,12 @@ export function createHollow(scene, kind, at, hpScale = 1) {
     kind, def, group, hp, maxHp: hp, alive: true,
     radius: def.radius, speed: def.speed * (0.92 + Math.random() * 0.16),
     attackCd: 0.6 + Math.random() * 0.6, riseT: 0, wobble: Math.random() * 9,
+    summonCd: 5, announced: false, // the King's court: he calls husks to him
     // Ray test against body and head spheres; returns {t, head} or null.
     hitTest(origin, dir) {
       const s = def.scale;
       let best = null;
-      for (const [cy, r, head] of [[1.02 * s, 0.66 * s, false], [(kind === 'brute' ? 1.95 : kind === 'husk' ? 1.34 : 1.7) * s, 0.36 * s, true]]) {
+      for (const [cy, r, head] of [[1.02 * s, 0.66 * s, false], [(kind === 'king' ? 1.97 : kind === 'brute' ? 1.95 : kind === 'husk' ? 1.34 : 1.7) * s, 0.36 * s, true]]) {
         _v.set(group.position.x, group.position.y + cy, group.position.z).sub(origin);
         const t = _v.dot(dir);
         if (t < 0.5) continue;
@@ -104,6 +118,15 @@ export function createHollow(scene, kind, at, hpScale = 1) {
         return;
       }
       const p = group.position;
+      // The King does not fight alone: every few seconds he calls two husks out of
+      // the stones beside him, so wearing him down is a race against his court.
+      if (kind === 'king') {
+        this.summonCd -= dt;
+        if (this.summonCd <= 0 && ctx.enemies.length < 14) {
+          this.summonCd = 7;
+          ctx.summon(this);
+        }
+      }
       // Choose a victim: the keeper, if close; otherwise the crystal.
       const toPlayer = Math.hypot(ctx.playerPos.x - p.x, ctx.playerPos.z - p.z);
       const huntPlayer = toPlayer < 10.5;

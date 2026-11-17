@@ -119,7 +119,8 @@ function resolveShot() {
         hud.setScore(game.score, game.embers);
         sfx.kill();
         weapon.burst(_point, 14, 0xff7a30);
-        if (e.kind === 'brute') hud.feed(`Brute down — <b>+${paid} embers</b>`);
+        if (e.kind === 'king') { hud.feed(`👑 <b>THE HOLLOW KING FALLS — +${paid} embers</b>`); weapon.burst(_point, 30, 0xff7a30); }
+        else if (e.kind === 'brute') hud.feed(`Brute down — <b>+${paid} embers</b>`);
         scene.remove(e.group);
       } else {
         hud.hitmark(false);
@@ -140,6 +141,18 @@ const enemyCtx = {
   get solids() { return world.solids; },
   get enemies() { return game.enemies; },
   get time() { return game.time; },
+  summon(king) {
+    // The King's called husks join the wave properly: they count toward its total,
+    // so the wave cannot end while the court still stands.
+    for (const side of [-1, 1]) {
+      const at = king.group.position.clone();
+      at.x += side * 2.6; at.z += 1.2;
+      game.enemies.push(createHollow(scene, 'husk', at, game.hpScale));
+      game.waveTotal += 1;
+    }
+    if (!king.announced) { king.announced = true; hud.feed('👑 <b>The Hollow King calls his court!</b>'); }
+    sfx.horn();
+  },
   shootBolt(e, target) {
     const from = e.group.position.clone();
     from.y += 1.55 * e.def.scale;
@@ -182,7 +195,7 @@ function startWave(n) {
   enemyCtx.warned = false;
   hud.setWave(n, TOTAL_WAVES);
   hud.setWaveProgress(0);
-  hud.banner(`WAVE ${n}`, n === 1 ? 'The Hollow come through the gates. Hold the crystal.' : n === TOTAL_WAVES ? 'The last wave. Dawn is close.' : 'They return, angrier.', 2400);
+  hud.banner(`WAVE ${n}`, n === 1 ? 'The Hollow come through the gates. Hold the crystal.' : n === TOTAL_WAVES ? 'The Hollow King comes himself. End him, and dawn breaks.' : 'They return, angrier.', 2400);
   sfx.horn();
 }
 
@@ -195,7 +208,7 @@ function waveCleared() {
   game.mode = 'upgrade';
   sfx.cleared();
   document.exitPointerLock?.();
-  hud.showUpgrades(game.wave, draftUpgrades(3), game.embers, (u) => {
+  hud.showUpgrades(game.wave, draftUpgrades(3, weapon.kind === 'smg' ? new Set(['smg']) : new Set()), game.embers, (u) => {
     game.embers -= u.cost;
     u.apply({ player, weapon, crystal, game });
     hud.setScore(game.score, game.embers);
@@ -225,7 +238,7 @@ function resetGame() {
   clearBolts(scene);
   Object.assign(game, { wave: 0, score: 0, kills: 0, embers: 0, emberMultiplier: 1, spawnQueue: [], waveTotal: 0, waveKilled: 0 });
   crystal.hp = crystal.maxHp;
-  Object.assign(weapon.stats, { ...WEAPON_STATS });
+  weapon.swapTo('rifle'); // a fresh stand starts with the VK-47, blessings forgotten
   weapon.refill();
   player.reset();
   syncCrystal();
@@ -273,18 +286,20 @@ function poseShot(name) {
   }
   hud.showGame();
   if (name === 'cover') {
-    // Wave 3, mid-fight: the keeper south-east of the crystal, Hollow closing in, a
-    // round already on its way to the brute and a soldier's bolt answering.
-    player.pos.set(14.5, 0, 12.5);
-    player.setView(Math.PI * 0.25, -0.02);
-    const spots = [['brute', -4.5, -6], ['soldier', -1.5, -9.5], ['husk', 2.5, -5.5], ['husk', -7, -1], ['husk', 4.5, 3], ['soldier', 8, -5.5]];
+    // Wave 10, the finale: the keeper south-east of the crystal with the Raptor in
+    // hand, the Hollow King himself towering past the crystal with his court around
+    // him, a round already on its way and a soldier's bolt answering.
+    player.pos.set(12, 0, 8.5);
+    player.setView(Math.PI * 0.3, -0.02);
+    weapon.swapTo('smg');
+    const spots = [['king', -10, -3.5], ['brute', -14.5, -7], ['soldier', 0.5, -7.5], ['soldier', -4, -11.5], ['husk', 2.5, -2], ['husk', -5, -3]];
     for (const [kind, x, z] of spots) {
-      const e = createHollow(scene, kind, new THREE.Vector3(x, 0, z), 1.1);
+      const e = createHollow(scene, kind, new THREE.Vector3(x, 0, z), 1.5);
       e.riseT = 1; e.group.position.y = 0;
       e.group.rotation.y = Math.atan2(-x, -z);
       game.enemies.push(e);
     }
-    spawnBolt(scene, new THREE.Vector3(-1.5, 1.6, -9.5), new THREE.Vector3(-0.8, 2.2, -5));
+    spawnBolt(scene, new THREE.Vector3(3, 1.6, -6.5), new THREE.Vector3(1.2, 2.2, -3));
     // The frozen shot: a tracer stretched from the muzzle and the flash that made it,
     // parented to the camera so they sit exactly on the aim line.
     const tracer = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 13), new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: .85 }));
@@ -294,14 +309,14 @@ function poseShot(name) {
     flashSpr.scale.setScalar(0.55);
     flashSpr.position.set(0.23, -0.17, -0.85);
     camera.add(flashSpr);
-    game.wave = 3;
-    hud.setWave(3, TOTAL_WAVES);
-    crystal.hp = 390; syncCrystal();
-    hud.setWaveProgress(0.45);
-    hud.setScore(1250, 64);
-    hud.setHp(82, 100);
-    hud.setAmmo(24, 30, false);
-    hud.feed('Brute down — <b>+25 embers</b>');
+    game.wave = 10;
+    hud.setWave(10, TOTAL_WAVES);
+    crystal.hp = 310; syncCrystal();
+    hud.setWaveProgress(0.72);
+    hud.setScore(7900, 214);
+    hud.setHp(68, 100);
+    hud.setAmmo(31, 40, false);
+    hud.feed('👑 <b>The Hollow King calls his court!</b>');
   } else if (name === 'upgrade') {
     player.pos.set(7, 0, 13);
     player.setView(0.49, 0.02);
@@ -311,7 +326,7 @@ function poseShot(name) {
     hud.setScore(2980, 118);
     hud.setHp(76, 100);
     hud.setAmmo(30, 30, false);
-    hud.showUpgrades(4, [UPGRADES[0], UPGRADES[3], UPGRADES[4]], 118, () => {});
+    hud.showUpgrades(4, [UPGRADES[9], UPGRADES[0], UPGRADES[3]], 118, () => {});
   } else if (name === 'end') {
     player.pos.set(6, 0, 12);
     player.setView(0.46, 0.03);

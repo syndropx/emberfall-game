@@ -10,8 +10,11 @@ serve the `game/` folder statically and open `index.html`.
 
 At dusk the Hollow pour through the four gates of a desert plaza to drink the last
 Ember Crystal dry. You are its keeper: ten waves of husks, soldiers and brutes, an
-ember purse filled by every kill, and a draft of three upgrades between waves.
-Clear wave 10 and dawn breaks. Let the crystal — or yourself — fall, and the light goes out.
+ember purse filled by every kill, and a draft of three upgrades between waves — one
+of them trades your rifle for the Raptor SMG and changes the whole stand. In wave 10
+the Hollow King walks in himself, crowned in bone, calling husks out of the stones
+while he volleys ember bolts at the crystal. Kill him and dawn breaks. Let the
+crystal — or yourself — fall, and the light goes out.
 
 **Controls.** WASD move · mouse aim · click fire · R reload · Shift sprint.
 
